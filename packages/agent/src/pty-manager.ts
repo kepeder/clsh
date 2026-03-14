@@ -4,7 +4,8 @@ import { homedir } from 'node:os';
 import { basename } from 'node:path';
 import type { ShellType } from './types.js';
 import type { DbStatements } from './db.js';
-import { tmuxSessionExists, killTmuxSession, listClshTmuxSessions, TMUX_SOCKET } from './tmux.js';
+import { tmuxSessionExists, killTmuxSession, listClshTmuxSessions, capturePaneContent, TMUX_SOCKET } from './tmux.js';
+import { ControlModeLineBuffer, buildSendKeysCommands } from './control-mode-parser.js';
 
 /** Maximum number of buffer entries retained per session for reconnection replay. */
 const MAX_BUFFER_SIZE = 10_000;
@@ -148,45 +149,90 @@ export class PTYManager {
     return this.tmuxEnabled && TMUX_WRAPPABLE.has(shell);
   }
 
-  /** Wires up data/exit handlers for a PTY session. */
-  private wireHandlers(
+  /**
+   * Processes raw terminal data for a session: tracks CWD, updates buffer, notifies listeners.
+   * Used by both raw and control mode handlers to process actual terminal output.
+   */
+  private processSessionOutput(
+    session: PTYSession,
+    data: string,
+    dataListeners: Array<(data: string) => void>,
+  ): void {
+    session.lastActivityAt = Date.now();
+    session.status = 'run';
+
+    const parsedCwd = parseOSC7(data);
+    if (parsedCwd) {
+      session.cwd = parsedCwd;
+      if (!session.userRenamed) {
+        session.name = basename(parsedCwd);
+      }
+      this.emitUpdate(session);
+      if (session.tmuxName && this.db) {
+        try {
+          this.db.updatePtySession.run(session.name, session.cwd, session.id);
+        } catch { /* non-critical */ }
+      }
+    }
+
+    session.buffer.push(data);
+    if (session.buffer.length > MAX_BUFFER_SIZE) {
+      session.buffer.splice(0, session.buffer.length - MAX_BUFFER_SIZE);
+    }
+    for (const listener of dataListeners) {
+      listener(data);
+    }
+  }
+
+  /** Wires up data/exit handlers for a raw PTY session (no tmux). */
+  private wireRawHandlers(
     session: PTYSession,
     dataListeners: Array<(data: string) => void>,
     exitListeners: Array<(event: { exitCode: number; signal?: number }) => void>,
   ): void {
     session.pty.onData((data: string) => {
-      session.lastActivityAt = Date.now();
-      session.status = 'run';
-
-      const parsedCwd = parseOSC7(data);
-      if (parsedCwd) {
-        session.cwd = parsedCwd;
-        if (!session.userRenamed) {
-          session.name = basename(parsedCwd);
-        }
-        this.emitUpdate(session);
-        // Persist CWD change to DB if tmux-backed
-        if (session.tmuxName && this.db) {
-          try {
-            this.db.updatePtySession.run(session.name, session.cwd, session.id);
-          } catch { /* non-critical */ }
-        }
-      }
-
-      session.buffer.push(data);
-      if (session.buffer.length > MAX_BUFFER_SIZE) {
-        session.buffer.splice(0, session.buffer.length - MAX_BUFFER_SIZE);
-      }
-      for (const listener of dataListeners) {
-        listener(data);
-      }
+      this.processSessionOutput(session, data, dataListeners);
     });
 
     session.pty.onExit((event: { exitCode: number; signal?: number }) => {
       for (const listener of exitListeners) {
         listener(event);
       }
-      // Clean up tmux session and DB row on exit
+      if (session.tmuxName) {
+        killTmuxSession(session.tmuxName);
+        if (this.db) {
+          try { this.db.deletePtySession.run(session.id); } catch { /* ignore */ }
+        }
+      }
+      this.sessions.delete(session.id);
+      this.updateListeners.delete(session.id);
+    });
+  }
+
+  /**
+   * Wires up data/exit handlers for a tmux control mode session.
+   * Parses the control mode protocol and extracts raw %output data.
+   */
+  private wireControlModeHandlers(
+    session: PTYSession,
+    dataListeners: Array<(data: string) => void>,
+    exitListeners: Array<(event: { exitCode: number; signal?: number }) => void>,
+  ): void {
+    const lineBuffer = new ControlModeLineBuffer((event) => {
+      if (event.type === 'output') {
+        this.processSessionOutput(session, event.data, dataListeners);
+      }
+      // %exit is handled by pty.onExit below
+    });
+
+    session.pty.onData((data: string) => {
+      lineBuffer.feed(data);
+    });
+
+    session.pty.onExit((event: { exitCode: number; signal?: number }) => {
+      for (const listener of exitListeners) {
+        listener(event);
+      }
       if (session.tmuxName) {
         killTmuxSession(session.tmuxName);
         if (this.db) {
@@ -200,7 +246,9 @@ export class PTYManager {
 
   /**
    * Creates a new PTY session with the specified shell type and dimensions.
-   * If tmux is enabled and the shell is wrappable, the session is backed by tmux.
+   * If tmux is enabled and the shell is wrappable, uses tmux control mode (-CC)
+   * for session persistence with proper scrollback support.
+   * Falls back to raw PTY if tmux is unavailable.
    */
   create(
     shell: ShellType,
@@ -220,9 +268,10 @@ export class PTYManager {
       const [innerCmd, innerArgs] = SHELL_MAP[shell];
       cmd = 'tmux';
       args = [
+        '-CC',
         '-L', TMUX_SOCKET,
         '-f', this.tmuxConfPath,
-        'new-session', '-A',
+        'new-session',
         '-s', tmuxName as string,
         '-x', String(cols),
         '-y', String(rows),
@@ -264,7 +313,12 @@ export class PTYManager {
       },
     };
 
-    this.wireHandlers(session, dataListeners, exitListeners);
+    if (tmuxName) {
+      this.wireControlModeHandlers(session, dataListeners, exitListeners);
+    } else {
+      this.wireRawHandlers(session, dataListeners, exitListeners);
+    }
+
     this.sessions.set(id, session);
 
     // Persist to DB for rediscovery
@@ -279,6 +333,8 @@ export class PTYManager {
 
   /**
    * Reattaches to a tmux session that survived a server restart.
+   * Uses control mode (-CC) for the attachment and bootstraps the buffer
+   * with capture-pane content so the client sees existing scrollback.
    * Returns the restored PTYSession or null if the tmux session is gone.
    */
   reattach(
@@ -298,9 +354,12 @@ export class PTYManager {
       return null;
     }
 
+    // Capture existing scrollback before attaching (so we don't miss/duplicate anything)
+    const capturedContent = capturePaneContent(tmuxName);
+
     const args = this.tmuxConfPath
-      ? ['-L', TMUX_SOCKET, '-f', this.tmuxConfPath, 'attach-session', '-t', tmuxName]
-      : ['-L', TMUX_SOCKET, 'attach-session', '-t', tmuxName];
+      ? ['-CC', '-L', TMUX_SOCKET, '-f', this.tmuxConfPath, 'attach-session', '-t', tmuxName]
+      : ['-CC', '-L', TMUX_SOCKET, 'attach-session', '-t', tmuxName];
 
     const pty = spawn('tmux', args, {
       name: 'xterm-256color',
@@ -314,6 +373,11 @@ export class PTYManager {
     const dataListeners: Array<(data: string) => void> = [];
     const exitListeners: Array<(event: { exitCode: number; signal?: number }) => void> = [];
     this.updateListeners.set(sessionId, []);
+
+    // Bootstrap buffer with captured scrollback content
+    if (capturedContent) {
+      buffer.push(capturedContent);
+    }
 
     const session: PTYSession = {
       id: sessionId,
@@ -334,7 +398,7 @@ export class PTYManager {
       },
     };
 
-    this.wireHandlers(session, dataListeners, exitListeners);
+    this.wireControlModeHandlers(session, dataListeners, exitListeners);
     this.sessions.set(sessionId, session);
     return session;
   }
@@ -377,13 +441,26 @@ export class PTYManager {
     return recovered;
   }
 
-  /** Writes data to the PTY stdin of the specified session. */
+  /**
+   * Writes data to the PTY stdin of the specified session.
+   * For control mode sessions, translates input to tmux send-keys -H commands.
+   */
   write(id: string, data: string): void {
     const session = this.sessions.get(id);
     if (!session) {
       throw new Error(`Session not found: ${id}`);
     }
-    session.pty.write(data);
+
+    if (session.tmuxName) {
+      // Control mode: send input via tmux send-keys -H (hex-encoded bytes)
+      const commands = buildSendKeysCommands(session.tmuxName, data);
+      for (const cmd of commands) {
+        session.pty.write(cmd + '\n');
+      }
+    } else {
+      // Raw PTY: write directly
+      session.pty.write(data);
+    }
   }
 
   /** Renames a session and marks it as user-renamed (suppresses OSC 7 name updates). */
@@ -400,13 +477,23 @@ export class PTYManager {
     }
   }
 
-  /** Resizes the PTY of the specified session. */
+  /**
+   * Resizes the PTY of the specified session.
+   * For control mode sessions, sends refresh-client -C to tmux.
+   */
   resize(id: string, cols: number, rows: number): void {
     const session = this.sessions.get(id);
     if (!session) {
       throw new Error(`Session not found: ${id}`);
     }
-    session.pty.resize(cols, rows);
+
+    if (session.tmuxName) {
+      // Control mode: tell tmux the new client size
+      session.pty.write(`refresh-client -C ${String(cols)},${String(rows)}\n`);
+    } else {
+      // Raw PTY: resize directly
+      session.pty.resize(cols, rows);
+    }
   }
 
   /** Destroys a single session by ID, killing the underlying PTY and tmux session. */

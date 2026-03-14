@@ -10,8 +10,7 @@ import { createAppServer, startServer } from './server.js';
 import { setupWebSocketHandler } from './ws-handler.js';
 import { PTYManager } from './pty-manager.js';
 import { createTunnel, printAccessInfo, registerShutdownHandlers } from './tunnel.js';
-// tmux imports preserved for future re-enable with control mode (-CC)
-// import { isTmuxAvailable, ensureTmuxConfig } from './tmux.js';
+import { isTmuxAvailable, ensureTmuxConfig } from './tmux.js';
 
 /**
  * Prevents macOS from sleeping while the agent is running.
@@ -50,20 +49,38 @@ async function main(): Promise<void> {
   const tokenHash = hashToken(bootstrapToken);
   statements.insertBootstrapToken.run(tokenId, tokenHash);
 
-  // 4. tmux wrapping disabled — it breaks xterm.js scrollback because tmux
-  //    is a terminal emulator that sends screen redraws instead of raw output.
-  //    TODO: Re-enable with tmux control mode (-CC) for persistence + scroll.
-  console.log('  Sessions are ephemeral (tmux wrapping disabled for scroll support)');
+  // 4. tmux session persistence (control mode -CC for scrollback support)
+  //    Falls back to raw PTY if tmux is not installed or CLSH_NO_TMUX=1
+  let tmuxEnabled = false;
+  let tmuxConfPath: string | null = null;
+
+  if (config.tmuxDisabled) {
+    console.log('  Session persistence disabled (CLSH_NO_TMUX=1)');
+  } else if (!isTmuxAvailable()) {
+    console.log('  Sessions are ephemeral (tmux not found — install tmux for session persistence)');
+  } else {
+    tmuxConfPath = ensureTmuxConfig();
+    tmuxEnabled = true;
+    console.log('  Session persistence active (tmux control mode)');
+  }
 
   // 5. Create HTTP + WebSocket server
   const { httpServer, wss } = createAppServer(config, statements);
 
   // 6. Set up PTY manager and WebSocket handler
   const ptyManager = new PTYManager({
-    tmuxEnabled: false,
-    tmuxConfPath: null,
+    tmuxEnabled,
+    tmuxConfPath,
     dbStatements: statements,
   });
+
+  // 7. Recover sessions from previous server run (tmux sessions survive restarts)
+  if (tmuxEnabled) {
+    const recovered = ptyManager.rediscoverAll();
+    if (recovered.length > 0) {
+      console.log(`  Recovered ${String(recovered.length)} session(s) from previous run`);
+    }
+  }
 
   setupWebSocketHandler(wss, ptyManager, config.jwtSecret);
 
@@ -84,7 +101,7 @@ async function main(): Promise<void> {
   // 11. Register graceful shutdown handlers
   registerShutdownHandlers(() => {
     stopCaffeinate?.();
-    ptyManager.destroyAll();
+    ptyManager.destroyAll(); // Kills control clients but leaves tmux sessions alive
     db.close();
     httpServer.close();
   });

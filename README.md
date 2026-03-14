@@ -84,9 +84,10 @@ A QR code prints to the console. Scan it on your phone. That's it.
 
 1. `npm run dev` starts the backend agent + React frontend
 2. The agent spawns real terminal sessions via `node-pty`
-3. A tunnel (ngrok, SSH, or Wi-Fi) exposes the agent over HTTPS
-4. A one-time bootstrap token + QR code authenticates your phone
-5. xterm.js renders the terminals in your browser with full color and interactivity
+3. When tmux is installed, sessions are wrapped in tmux for **persistence** — they survive server restarts
+4. A tunnel (ngrok, SSH, or Wi-Fi) exposes the agent over HTTPS
+5. A one-time bootstrap token + QR code authenticates your phone
+6. xterm.js renders the terminals in your browser with full color and interactivity
 
 ## Features
 
@@ -94,6 +95,7 @@ A QR code prints to the console. Scan it on your phone. That's it.
 
 - **Multiple live sessions** — create, rename, close; up to 8 concurrent PTYs
 - **Real PTY** — full zsh/bash with colors, vim, tmux, everything
+- **Session persistence** — sessions survive server restarts via tmux (auto-detected, graceful fallback if tmux isn't installed)
 - **Session grid** — 2-column card layout with live terminal previews
 - **Claude Code streaming** — run AI coding agents remotely from your phone
 
@@ -157,6 +159,26 @@ TUNNEL=ssh npm run dev     # force SSH tunnel
 TUNNEL=local npm run dev   # force local Wi-Fi only
 ```
 
+## Session Persistence
+
+When tmux is installed, clsh automatically wraps sessions in tmux using **control mode** (`-CC`). This means your terminal sessions survive server restarts — stop `npm run dev`, start it again, and your sessions are still there with full scrollback history.
+
+```
+# Install tmux (if not already installed)
+brew install tmux          # macOS
+sudo apt install tmux      # Ubuntu/Debian
+```
+
+No configuration needed. clsh auto-detects tmux and enables persistence. If tmux isn't installed, sessions work normally but are ephemeral (lost on restart).
+
+To disable persistence even with tmux installed:
+
+```bash
+CLSH_NO_TMUX=1 npm run dev
+```
+
+**How it works under the hood:** clsh uses tmux control mode (`-CC`) instead of normal tmux attachment. Control mode sends raw terminal output as structured notifications (`%output`) instead of screen redraws, which means xterm.js gets the original byte stream and scrollback works perfectly. User input is forwarded via `send-keys -H` (hex-encoded). On server restart, `capture-pane` recovers the existing scrollback and control mode resumes live streaming.
+
 ## Add to Home Screen
 
 With a permanent ngrok URL, add clsh as a PWA:
@@ -195,7 +217,7 @@ clsh works great out of the box. Optional features level it up:
 | Layer | Technology |
 |-------|------------|
 | Frontend | React 18, TypeScript, Vite 6, Tailwind CSS v4, xterm.js (WebGL) |
-| Backend | Node.js 20+, Express, ws, node-pty, better-sqlite3 |
+| Backend | Node.js 20+, Express, ws, node-pty, tmux (control mode), better-sqlite3 |
 | Tunnel | @ngrok/ngrok SDK, localhost.run (SSH fallback) |
 | Auth | jose (JWT), one-time bootstrap tokens |
 | Monorepo | Turborepo, npm workspaces |
@@ -222,6 +244,7 @@ Create a `.env` file in the project root (optional):
 NGROK_AUTHTOKEN=your_token                        # For permanent URL
 NGROK_STATIC_DOMAIN=your-subdomain.ngrok-free.dev # Static ngrok domain
 CLSH_PORT=4030                                    # Agent port (default: 4030)
+CLSH_NO_TMUX=1                                    # Disable tmux session persistence
 CLSH_NO_OPEN=1                                    # Skip auto-opening browser
 TUNNEL=ssh                                        # Force tunnel method: ssh | local
 ```
@@ -237,7 +260,7 @@ See `.env.example` for all options.
 - [x] QR code + JWT auth
 - [x] PWA with fullscreen standalone mode
 - [x] Demo mode for showcasing
-- [ ] Session persistence (tmux integration — experimental)
+- [x] Session persistence (tmux control mode — sessions survive restarts)
 - [ ] Remote cloud machines (containers instead of local tunnel)
 - [ ] Team sharing (shared sessions with presence)
 - [ ] iOS/Android native app

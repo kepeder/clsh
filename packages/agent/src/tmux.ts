@@ -95,3 +95,24 @@ export function killAllClshTmuxSessions(): void {
     killTmuxSession(name);
   }
 }
+
+/**
+ * Captures the full scrollback + visible screen of a tmux pane.
+ * Returns the content as text with ANSI escape sequences preserved.
+ * Used to bootstrap the buffer on reattach after server restart.
+ */
+export function capturePaneContent(tmuxName: string): string {
+  try {
+    const content = execFileSync('tmux', [
+      '-L', TMUX_SOCKET,
+      'capture-pane', '-t', tmuxName,
+      '-p', '-S', '-', '-e',
+    ], { encoding: 'utf-8' });
+    // capture-pane outputs \n line endings, but xterm.js needs \r\n —
+    // without \r the cursor doesn't return to column 0, causing text to cascade right.
+    // Also trim trailing blank lines (empty terminal rows below content).
+    return content.replace(/\n+$/, '\n').replace(/\n/g, '\r\n');
+  } catch {
+    return '';
+  }
+}

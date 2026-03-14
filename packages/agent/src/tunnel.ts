@@ -14,6 +14,18 @@ export interface TunnelResult {
 let activeNgrokListener: ngrok.Listener | null = null;
 let activeSSHProcess: ChildProcess | null = null;
 
+// Tunnel state for monitoring and recovery
+interface TunnelConfig {
+  port: number;
+  ngrokAuthtoken?: string;
+  ngrokStaticDomain?: string;
+  forcedMethod?: TunnelMethod;
+}
+let savedConfig: TunnelConfig | null = null;
+let currentTunnel: TunnelResult | null = null;
+/** Set to true when an SSH process dies after a tunnel was established. */
+let tunnelDead = false;
+
 /**
  * Returns the first non-internal IPv4 address for this machine.
  * Used so phones on the same Wi-Fi can connect without any tunnel.
@@ -68,8 +80,12 @@ function createSSHTunnel(localPort: number): Promise<string> {
     });
 
     ssh.on('close', (code) => {
+      activeSSHProcess = null;
       if (!resolved) {
         reject(new Error(`SSH exited with code ${String(code)}`));
+      } else {
+        // Tunnel was established but SSH process died (network drop, sleep, etc.)
+        tunnelDead = true;
       }
     });
 
@@ -96,6 +112,10 @@ export async function createTunnel(
   ngrokStaticDomain?: string,
   forcedMethod?: 'ngrok' | 'ssh' | 'local',
 ): Promise<TunnelResult> {
+  // Store config for recreation on tunnel death
+  savedConfig = { port, ngrokAuthtoken, ngrokStaticDomain, forcedMethod };
+  tunnelDead = false;
+
   // 1. ngrok — best reliability, optional free-account token
   if (forcedMethod !== 'ssh' && forcedMethod !== 'local' && ngrokAuthtoken) {
     try {
@@ -107,7 +127,10 @@ export async function createTunnel(
       const listener = await ngrok.forward(ngrokOpts);
       activeNgrokListener = listener;
       const url = listener.url();
-      if (url) return { url, method: 'ngrok' };
+      if (url) {
+        currentTunnel = { url, method: 'ngrok' };
+        return currentTunnel;
+      }
     } catch {
       // ngrok failed — try SSH
     }
@@ -117,11 +140,13 @@ export async function createTunnel(
   if (forcedMethod === 'local') {
     const localIp = getLocalIP();
     const url = localIp ? `http://${localIp}:${port}` : `http://localhost:${port}`;
-    return { url, method: 'local' };
+    currentTunnel = { url, method: 'local' };
+    return currentTunnel;
   }
   try {
     const url = await createSSHTunnel(port);
-    return { url, method: 'ssh' };
+    currentTunnel = { url, method: 'ssh' };
+    return currentTunnel;
   } catch {
     // SSH failed — fall back to local
   }
@@ -129,7 +154,15 @@ export async function createTunnel(
   // 3. Local network — works on same Wi-Fi, no internet required
   const localIp = getLocalIP();
   const url = localIp ? `http://${localIp}:${port}` : `http://localhost:${port}`;
-  return { url, method: 'local' };
+  currentTunnel = { url, method: 'local' };
+  return currentTunnel;
+}
+
+/**
+ * Returns the current tunnel URL, or null if no tunnel is active.
+ */
+export function getTunnelUrl(): string | null {
+  return currentTunnel?.url ?? null;
 }
 
 /**
@@ -174,6 +207,103 @@ export function printAccessInfo(
   });
 }
 
+// --------------- Tunnel monitoring and recovery ---------------
+
+/**
+ * Checks if the tunnel is alive by hitting our own health endpoint through it.
+ * Verifies the full path: server → tunnel → internet → back.
+ */
+async function isTunnelAlive(): Promise<boolean> {
+  if (tunnelDead || !currentTunnel) return false;
+  if (currentTunnel.method === 'local') return true;
+  try {
+    const res = await fetch(`${currentTunnel.url}/api/health`, {
+      signal: AbortSignal.timeout(5_000),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Closes the current tunnel and creates a new one using the saved config.
+ */
+async function recreate(): Promise<TunnelResult | null> {
+  if (!savedConfig) return null;
+  await closeTunnel();
+  return createTunnel(
+    savedConfig.port,
+    savedConfig.ngrokAuthtoken,
+    savedConfig.ngrokStaticDomain,
+    savedConfig.forcedMethod,
+  );
+}
+
+/**
+ * Starts a background monitor that detects system sleep/wake and SSH tunnel
+ * death, then automatically recreates the tunnel.
+ *
+ * Uses a "time drift" detector: if the interval timer fires after a gap much
+ * larger than expected, the system was sleeping. On wake, it waits for the
+ * network to stabilize, checks tunnel health, and recreates if necessary.
+ *
+ * @param onRecovered — called when the tunnel is recreated with a new URL
+ * @returns cleanup function to stop the monitor
+ */
+export function startTunnelMonitor(
+  onRecovered: (url: string, method: TunnelMethod) => void,
+): () => void {
+  const INTERVAL_MS = 5_000;
+  const WAKE_THRESHOLD_MS = 15_000;
+  let lastTick = Date.now();
+  let recovering = false;
+
+  const check = async () => {
+    if (recovering) return;
+
+    const now = Date.now();
+    const gap = now - lastTick - INTERVAL_MS;
+    lastTick = now;
+
+    const woke = gap > WAKE_THRESHOLD_MS;
+    if (!woke && !tunnelDead) return;
+
+    recovering = true;
+
+    try {
+      if (woke) {
+        console.log(`  Wake detected (${Math.round((gap + INTERVAL_MS) / 1000)}s gap), checking tunnel...`);
+        // Give the network interface a moment to come back up
+        await new Promise<void>((r) => setTimeout(r, 3_000));
+      } else {
+        console.log('  Tunnel process died, restarting...');
+        await new Promise<void>((r) => setTimeout(r, 2_000));
+      }
+
+      const alive = tunnelDead ? false : await isTunnelAlive();
+
+      if (alive) {
+        console.log('  Tunnel OK');
+      } else {
+        console.log('  Tunnel down, recreating...');
+        const result = await recreate();
+        if (result) {
+          console.log(`  Tunnel recovered: ${result.url} (${result.method})`);
+          onRecovered(result.url, result.method);
+        }
+      }
+    } catch (err) {
+      console.error('  Tunnel recovery failed:', err);
+    }
+
+    recovering = false;
+  };
+
+  const timer = setInterval(() => void check(), INTERVAL_MS);
+  return () => clearInterval(timer);
+}
+
 /**
  * Closes any active tunnels (ngrok listener and/or SSH process).
  */
@@ -186,6 +316,7 @@ export async function closeTunnel(): Promise<void> {
     activeSSHProcess.kill();
     activeSSHProcess = null;
   }
+  tunnelDead = false;
 }
 
 /**

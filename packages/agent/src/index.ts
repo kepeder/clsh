@@ -9,18 +9,19 @@ import { generateBootstrapToken, hashToken } from './auth.js';
 import { createAppServer, startServer } from './server.js';
 import { setupWebSocketHandler } from './ws-handler.js';
 import { PTYManager } from './pty-manager.js';
-import { createTunnel, printAccessInfo, registerShutdownHandlers } from './tunnel.js';
+import { createTunnel, printAccessInfo, startTunnelMonitor, registerShutdownHandlers } from './tunnel.js';
 import { isTmuxAvailable, ensureTmuxConfig } from './tmux.js';
+import { checkNetworkPersistence } from './power.js';
 
 /**
  * Prevents macOS from sleeping while the agent is running.
- * Uses `caffeinate -i` (prevent idle sleep) — the caffeinate process
- * is killed automatically when the agent exits.
+ * Flags: -d (display), -i (idle), -s (system/lid-close on AC power).
+ * The caffeinate process is killed automatically when the agent exits (-w).
  */
 function preventSleep(): (() => void) | null {
   if (process.platform !== 'darwin') return null;
   try {
-    const child = spawn('caffeinate', ['-i', '-w', String(process.pid)], {
+    const child = spawn('caffeinate', ['-dis', '-w', String(process.pid)], {
       stdio: 'ignore',
       detached: false,
     });
@@ -34,7 +35,10 @@ function preventSleep(): (() => void) | null {
 }
 
 async function main(): Promise<void> {
-  // 0. Prevent macOS from sleeping while the agent is running
+  // 0a. Check if macOS is configured for lid-close networking
+  checkNetworkPersistence();
+
+  // 0b. Prevent macOS from sleeping while the agent is running
   const stopCaffeinate = preventSleep();
 
   // 1. Load configuration
@@ -98,9 +102,16 @@ async function main(): Promise<void> {
   // 10. Print clean startup info
   printAccessInfo(tunnel.url, bootstrapToken, tunnel.method);
 
-  // 11. Register graceful shutdown handlers
+  // 11. Monitor tunnel health — auto-recovers after sleep/wake or SSH death
+  const stopTunnelMonitor = startTunnelMonitor((newUrl, method) => {
+    // Tunnel was recreated with a (possibly new) URL — reprint access info
+    printAccessInfo(newUrl, bootstrapToken, method);
+  });
+
+  // 12. Register graceful shutdown handlers
   registerShutdownHandlers(() => {
     stopCaffeinate?.();
+    stopTunnelMonitor();
     ptyManager.destroyAll(); // Kills control clients but leaves tmux sessions alive
     db.close();
     httpServer.close();

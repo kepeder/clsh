@@ -65,21 +65,32 @@ export class TerminalWSClient {
         return;
       }
 
+      // Close any previous WebSocket to prevent zombie connections.
+      // Without this, each reconnect attempt leaves an orphaned WebSocket
+      // whose onclose handler triggers duplicate reconnect cycles.
+      this.closeWebSocket();
+
       this.onStatusChange('connecting');
 
       const wsUrl = new URL(this.url);
       wsUrl.searchParams.set('token', this.token);
       wsUrl.searchParams.set('sessionId', this.sessionId);
 
+      let settled = false;
+
       const timeout = setTimeout(() => {
         // Connection did not establish in 2 seconds
-        resolve(false);
+        if (!settled) {
+          settled = true;
+          resolve(false);
+        }
       }, 2000);
 
       try {
         this.ws = new WebSocket(wsUrl.toString());
       } catch {
         clearTimeout(timeout);
+        settled = true;
         this.onStatusChange('disconnected');
         resolve(false);
         return;
@@ -87,11 +98,14 @@ export class TerminalWSClient {
 
       this.ws.onopen = () => {
         clearTimeout(timeout);
+        if (!settled) {
+          settled = true;
+          resolve(true);
+        }
         this.reconnectAttempts = 0;
         this.onStatusChange('connected');
         this.startPing();
         this.addLifecycleListeners();
-        resolve(true);
       };
 
       this.ws.onmessage = (event: MessageEvent) => {
@@ -105,6 +119,10 @@ export class TerminalWSClient {
 
       this.ws.onclose = (event: CloseEvent) => {
         clearTimeout(timeout);
+        if (!settled) {
+          settled = true;
+          resolve(false);
+        }
         this.stopPing();
         this.onStatusChange('disconnected');
         // 4001 = backend rejected token (expired JWT or backend restarted).
@@ -119,7 +137,6 @@ export class TerminalWSClient {
       };
 
       this.ws.onerror = () => {
-        clearTimeout(timeout);
         // onclose will fire after onerror, so reconnect is handled there
       };
     });
@@ -140,7 +157,6 @@ export class TerminalWSClient {
    */
   disconnect(): void {
     this.disposed = true;
-    this.stopPing();
     this.removeLifecycleListeners();
 
     if (this.reconnectTimer !== null) {
@@ -148,16 +164,24 @@ export class TerminalWSClient {
       this.reconnectTimer = null;
     }
 
+    this.closeWebSocket();
+    this.onStatusChange('disconnected');
+  }
+
+  /**
+   * Closes the current WebSocket without triggering reconnection.
+   * Detaches all event handlers first to prevent stale callbacks.
+   */
+  private closeWebSocket(): void {
     if (this.ws) {
+      this.ws.onopen = null;
       this.ws.onclose = null;
       this.ws.onerror = null;
       this.ws.onmessage = null;
-      this.ws.onopen = null;
       this.ws.close();
       this.ws = null;
     }
-
-    this.onStatusChange('disconnected');
+    this.stopPing();
   }
 
   /**

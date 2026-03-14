@@ -158,9 +158,8 @@ export function printAccessInfo(
   console.log('');
 
   qrcode.generate(authUrl, { small: true }, (code: string) => {
-    // Color the QR code orange
-    const orangeQR = code.split('\n').map((line: string) => `${o}${line}${r}`).join('\n');
-    console.log(orangeQR);
+    // Print QR in default terminal colors (high contrast in both light & dark terminals)
+    console.log(code);
     console.log(`${o}  Scan to connect ${dim}(token embedded in QR)${r}`);
     console.log('');
     console.log(`${o}  URL:   ${r}${publicUrl}`);

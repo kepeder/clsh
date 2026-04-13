@@ -27,7 +27,7 @@ export function TabBar({ session }: TabBarProps) {
           padding: '0 12px',
           color: '#f97316',
           borderBottom: '2px solid #f97316',
-          fontFamily: '"JetBrains Mono", monospace',
+          fontFamily: '"FiraCode Nerd Font Mono", "JetBrains Mono", monospace',
           fontSize: 11,
           whiteSpace: 'nowrap',
           flexShrink: 0,
@@ -59,7 +59,7 @@ export function TabBar({ session }: TabBarProps) {
         />
         <span
           style={{
-            fontFamily: '"JetBrains Mono", monospace',
+            fontFamily: '"FiraCode Nerd Font Mono", "JetBrains Mono", monospace',
             fontSize: 10,
             color: '#444',
           }}

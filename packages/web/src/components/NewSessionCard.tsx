@@ -37,7 +37,7 @@ export function NewSessionCard({ onCreateSession }: NewSessionCardProps) {
         style={{
           fontSize: 11,
           color: accent ?? '#444',
-          fontFamily: 'JetBrains Mono, monospace',
+          fontFamily: '"FiraCode Nerd Font Mono", "JetBrains Mono", monospace',
           marginTop: 4,
         }}
       >

@@ -47,7 +47,7 @@ export function useTerminal(
 
     const terminal = new Terminal({
       cursorBlink: true,
-      fontFamily: '"JetBrains Mono", monospace',
+      fontFamily: '"FiraCode Nerd Font Mono", "JetBrains Mono", monospace',
       fontSize: 12,
       theme: CLSH_THEME,
       allowProposedApi: true,
@@ -63,7 +63,7 @@ export function useTerminal(
 
     const init = async () => {
       try {
-        await document.fonts.load('12px "JetBrains Mono"');
+        await document.fonts.load('12px "FiraCode Nerd Font Mono"');
       } catch {
         // Font unavailable — proceed with fallback
       }

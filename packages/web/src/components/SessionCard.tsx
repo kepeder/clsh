@@ -84,7 +84,7 @@ export function SessionCard({ session, isActive, onSelect, onClose }: SessionCar
           style={{
             fontSize: 10,
             color: '#666',
-            fontFamily: 'JetBrains Mono, monospace',
+            fontFamily: '"FiraCode Nerd Font Mono", "JetBrains Mono", monospace',
             flex: 1,
           }}
         >
@@ -95,7 +95,7 @@ export function SessionCard({ session, isActive, onSelect, onClose }: SessionCar
             className="flex-shrink-0 rounded px-1"
             style={{
               fontSize: 9,
-              fontFamily: 'JetBrains Mono, monospace',
+              fontFamily: '"FiraCode Nerd Font Mono", "JetBrains Mono", monospace',
               fontWeight: 600,
               letterSpacing: '0.05em',
               ...badgeStyle,
@@ -119,7 +119,7 @@ export function SessionCard({ session, isActive, onSelect, onClose }: SessionCar
           style={{
             fontSize: 8,
             lineHeight: 1.4,
-            fontFamily: 'JetBrains Mono, monospace',
+            fontFamily: '"FiraCode Nerd Font Mono", "JetBrains Mono", monospace',
             color: '#d0d0d0',
             whiteSpace: 'pre',
             margin: 0,
@@ -175,7 +175,7 @@ export function SessionCard({ session, isActive, onSelect, onClose }: SessionCar
             style={{
               fontSize: 11,
               color: '#aaa',
-              fontFamily: 'JetBrains Mono, monospace',
+              fontFamily: '"FiraCode Nerd Font Mono", "JetBrains Mono", monospace',
               marginBottom: 8,
               textAlign: 'center',
               padding: '0 12px',
@@ -193,7 +193,7 @@ export function SessionCard({ session, isActive, onSelect, onClose }: SessionCar
                 borderRadius: 4,
                 color: '#ff5f57',
                 fontSize: 11,
-                fontFamily: 'JetBrains Mono, monospace',
+                fontFamily: '"FiraCode Nerd Font Mono", "JetBrains Mono", monospace',
                 padding: '4px 14px',
                 cursor: 'pointer',
               }}
@@ -209,7 +209,7 @@ export function SessionCard({ session, isActive, onSelect, onClose }: SessionCar
                 borderRadius: 4,
                 color: '#666',
                 fontSize: 11,
-                fontFamily: 'JetBrains Mono, monospace',
+                fontFamily: '"FiraCode Nerd Font Mono", "JetBrains Mono", monospace',
                 padding: '4px 14px',
                 cursor: 'pointer',
               }}

@@ -76,7 +76,7 @@ export function PWAInstallBanner() {
             fontWeight: 800,
             color: '#000',
             letterSpacing: '-0.03em',
-            fontFamily: 'JetBrains Mono, monospace',
+            fontFamily: '"FiraCode Nerd Font Mono", "JetBrains Mono", monospace',
           }}
         >
           c/
@@ -89,7 +89,7 @@ export function PWAInstallBanner() {
               fontSize: 13,
               fontWeight: 600,
               color: '#e5e5e5',
-              fontFamily: 'JetBrains Mono, monospace',
+              fontFamily: '"FiraCode Nerd Font Mono", "JetBrains Mono", monospace',
               lineHeight: 1.3,
             }}
           >
@@ -101,7 +101,7 @@ export function PWAInstallBanner() {
                 fontSize: 11,
                 color: '#666',
                 marginTop: 2,
-                fontFamily: 'JetBrains Mono, monospace',
+                fontFamily: '"FiraCode Nerd Font Mono", "JetBrains Mono", monospace',
                 lineHeight: 1.3,
               }}
             >
@@ -117,7 +117,7 @@ export function PWAInstallBanner() {
                 fontSize: 11,
                 color: '#666',
                 marginTop: 2,
-                fontFamily: 'JetBrains Mono, monospace',
+                fontFamily: '"FiraCode Nerd Font Mono", "JetBrains Mono", monospace',
                 lineHeight: 1.3,
               }}
             >
@@ -137,7 +137,7 @@ export function PWAInstallBanner() {
                 fontSize: 11,
                 fontWeight: 600,
                 color: '#000',
-                fontFamily: 'JetBrains Mono, monospace',
+                fontFamily: '"FiraCode Nerd Font Mono", "JetBrains Mono", monospace',
               }}
             >
               Install

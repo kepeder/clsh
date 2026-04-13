@@ -32,7 +32,7 @@ export function WorkspaceBar({
             className="flex-shrink-0 px-2.5 py-1"
             style={{
               fontSize: 11,
-              fontFamily: 'JetBrains Mono, monospace',
+              fontFamily: '"FiraCode Nerd Font Mono", "JetBrains Mono", monospace',
               fontWeight: isActive ? 700 : 400,
               background: isActive ? '#f97316' : 'transparent',
               color: isActive ? '#000' : '#555',
@@ -53,7 +53,7 @@ export function WorkspaceBar({
           className="ml-auto flex-shrink-0 px-2"
           style={{
             fontSize: 10,
-            fontFamily: 'JetBrains Mono, monospace',
+            fontFamily: '"FiraCode Nerd Font Mono", "JetBrains Mono", monospace',
             color: 'rgba(0,204,106,0.5)',
             whiteSpace: 'nowrap',
           }}

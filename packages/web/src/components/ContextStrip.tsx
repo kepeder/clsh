@@ -61,7 +61,7 @@ export function ContextStrip({ onKey }: ContextStripProps) {
             border: '1px solid #2a2a2a',
             borderRadius: 4,
             color: key.accent ? '#ff5f57' : '#666',
-            fontFamily: '"JetBrains Mono", monospace',
+            fontFamily: '"FiraCode Nerd Font Mono", "JetBrains Mono", monospace',
             fontSize: 9,
             cursor: 'pointer',
             padding: 0,

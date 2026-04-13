@@ -62,7 +62,7 @@ export function TitleBar({
           >
             <span
               style={{
-                fontFamily: '"JetBrains Mono", monospace',
+                fontFamily: '"FiraCode Nerd Font Mono", "JetBrains Mono", monospace',
                 fontSize: 12,
                 color: '#ccc',
                 background: '#161616',
@@ -127,7 +127,7 @@ export function TitleBar({
             <span
               onClick={onEditStart}
               style={{
-                fontFamily: '"JetBrains Mono", monospace',
+                fontFamily: '"FiraCode Nerd Font Mono", "JetBrains Mono", monospace',
                 fontSize: 12,
                 color: '#ccc',
                 cursor: 'pointer',

@@ -191,7 +191,7 @@ export function AuthScreen({ auth, onBootstrapSubmit, onPasswordSubmit, onBiomet
               <pre
                 className="inline-block text-left"
                 style={{
-                  fontFamily: "'SF Mono', 'Fira Code', 'JetBrains Mono', ui-monospace, monospace",
+                  fontFamily: "'FiraCode Nerd Font Mono', 'SF Mono', 'Fira Code', 'JetBrains Mono', ui-monospace, monospace",
                   fontSize: 'clamp(7px, 2.5vw, 14px)',
                   lineHeight: 1.3,
                   color: '#f97316',

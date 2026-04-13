@@ -27,7 +27,7 @@ export function GridView({
       style={{
         height: '100%',
         background: '#0a0a0a',
-        fontFamily: 'JetBrains Mono, monospace',
+        fontFamily: '"FiraCode Nerd Font Mono", "JetBrains Mono", monospace',
         userSelect: 'none',
       }}
     >

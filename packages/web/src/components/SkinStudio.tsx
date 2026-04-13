@@ -71,7 +71,7 @@ export default function SkinStudio({
           style={{
             color: '#f97316',
             fontSize: 12,
-            fontFamily: "'JetBrains Mono', monospace",
+            fontFamily: "'FiraCode Nerd Font Mono', 'JetBrains Mono', monospace",
             background: 'none',
             border: 'none',
             cursor: 'pointer',
@@ -94,7 +94,7 @@ export default function SkinStudio({
           style={{
             color: '#555555',
             fontSize: 12,
-            fontFamily: "'JetBrains Mono', monospace",
+            fontFamily: "'FiraCode Nerd Font Mono', 'JetBrains Mono', monospace",
           }}
         >
           {SKIN_ORDER.length} themes
@@ -142,7 +142,7 @@ export default function SkinStudio({
                   fontSize: 10,
                   color: '#555',
                   marginTop: 2,
-                  fontFamily: "'JetBrains Mono', monospace",
+                  fontFamily: "'FiraCode Nerd Font Mono', 'JetBrains Mono', monospace",
                 }}
               >
                 Use your device's physical keyboard
@@ -187,7 +187,7 @@ export default function SkinStudio({
             letterSpacing: '0.1em',
             color: '#444444',
             marginBottom: 12,
-            fontFamily: "'JetBrains Mono', monospace",
+            fontFamily: "'FiraCode Nerd Font Mono', 'JetBrains Mono', monospace",
           }}
         >
           LIVE PREVIEW
@@ -208,7 +208,7 @@ export default function SkinStudio({
             letterSpacing: '0.1em',
             color: '#444444',
             marginBottom: 12,
-            fontFamily: "'JetBrains Mono', monospace",
+            fontFamily: "'FiraCode Nerd Font Mono', 'JetBrains Mono', monospace",
           }}
         >
           THEMES
@@ -390,7 +390,7 @@ function SkinCard({
           style={{
             color: '#555555',
             fontSize: 11,
-            fontFamily: "'JetBrains Mono', monospace",
+            fontFamily: "'FiraCode Nerd Font Mono', 'JetBrains Mono', monospace",
           }}
         >
           {skin.subtitle}

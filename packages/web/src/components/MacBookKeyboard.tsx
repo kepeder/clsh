@@ -152,7 +152,7 @@ export function MacBookKeyboard({ onKey, perKeyColors }: MacBookKeyboardProps) {
               left: 4,
               fontSize: 7,
               color: isShifted ? '#f97316' : 'var(--key-label-shift, #555)',
-              fontFamily: '"JetBrains Mono", monospace',
+              fontFamily: '"FiraCode Nerd Font Mono", "JetBrains Mono", monospace',
               lineHeight: 1,
             }}
           >
@@ -165,7 +165,7 @@ export function MacBookKeyboard({ onKey, perKeyColors }: MacBookKeyboardProps) {
           style={{
             fontSize: 9,
             color: isFlashing ? '#060606' : isActive ? '#f97316' : 'var(--key-label, #8a8a8e)',
-            fontFamily: '"JetBrains Mono", monospace',
+            fontFamily: '"FiraCode Nerd Font Mono", "JetBrains Mono", monospace',
             lineHeight: 1,
             pointerEvents: 'none',
           }}

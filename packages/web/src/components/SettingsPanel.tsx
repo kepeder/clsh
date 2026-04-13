@@ -65,7 +65,7 @@ export function SettingsPanel({ onClose, onOpenSkinStudio, sessionCount }: Setti
           borderTop: '1px solid #2a2a2a',
           borderRadius: '16px 16px 0 0',
           padding: '16px 16px 32px',
-          fontFamily: 'JetBrains Mono, monospace',
+          fontFamily: '"FiraCode Nerd Font Mono", "JetBrains Mono", monospace',
         }}
       >
         {/* Handle bar */}
@@ -221,7 +221,7 @@ export function SettingsPanel({ onClose, onOpenSkinStudio, sessionCount }: Setti
                   borderRadius: 6,
                   color: copied ? '#28c840' : '#f97316',
                   fontSize: 12,
-                  fontFamily: 'JetBrains Mono, monospace',
+                  fontFamily: '"FiraCode Nerd Font Mono", "JetBrains Mono", monospace',
                   padding: '6px 20px',
                   cursor: 'pointer',
                   width: '100%',

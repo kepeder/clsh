@@ -370,7 +370,6 @@ function handleSessionList(ws: WebSocket, ptyManager: PTYManager): void {
     status: s.status,
   }));
 
-  console.log(`[clsh] session_list: ${sessions.length} sessions → [${sessions.map((s) => `${s.name}(pid=${String(s.pid)})`).join(', ')}]`);
   send(ws, { type: 'session_list', sessions });
 }
 

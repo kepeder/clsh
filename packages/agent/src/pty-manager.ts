@@ -254,9 +254,6 @@ export class PTYManager {
     });
 
     session.pty.onExit((event: { exitCode: number; signal?: number }) => {
-      if (session.external) {
-        console.log(`[clsh] External session ${session.tmuxName} control-mode exited (code=${event.exitCode})`);
-      }
       for (const listener of exitListeners) {
         listener(event);
       }
@@ -461,11 +458,8 @@ export class PTYManager {
     rows: number = 24,
   ): PTYSession | null {
     if (!tmuxSessionExists(tmuxName)) {
-      console.log(`[clsh] External session ${tmuxName}: tmux session does not exist, skipping`);
       return null;
     }
-
-    console.log(`[clsh] Adopting external session: ${tmuxName}`);
     const id = randomUUID();
 
     // Capture existing scrollback before attaching
@@ -484,11 +478,9 @@ export class PTYManager {
         cwd: homedir(),
         env: buildSafeEnv(),
       });
-    } catch (err) {
-      console.error(`[clsh] Failed to spawn tmux attach for ${tmuxName}:`, err);
+    } catch {
       return null;
     }
-    console.log(`[clsh] Spawned control-mode attach for ${tmuxName}, pid=${pty.pid}`);
 
     const buffer: string[] = [];
     const dataListeners: Array<(data: string) => void> = [];

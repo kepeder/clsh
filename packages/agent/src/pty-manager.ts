@@ -113,6 +113,8 @@ export class PTYManager {
   private updateListeners = new Map<string, Array<(meta: SessionMeta) => void>>();
   /** When true, PTY exit handlers skip tmux/DB cleanup to preserve session persistence. */
   private shuttingDown = false;
+  /** Tracks external tmux session names that failed adoption (to avoid retry loops). */
+  private failedExternalAdoptions = new Set<string>();
 
   private tmuxEnabled: boolean;
   private tmuxConfPath: string | null;
@@ -242,6 +244,9 @@ export class PTYManager {
     });
 
     session.pty.onExit((event: { exitCode: number; signal?: number }) => {
+      if (session.external) {
+        console.log(`[clsh] External session ${session.tmuxName} control-mode exited (code=${event.exitCode})`);
+      }
       for (const listener of exitListeners) {
         listener(event);
       }
@@ -446,9 +451,11 @@ export class PTYManager {
     rows: number = 24,
   ): PTYSession | null {
     if (!tmuxSessionExists(tmuxName)) {
+      console.log(`[clsh] External session ${tmuxName}: tmux session does not exist, skipping`);
       return null;
     }
 
+    console.log(`[clsh] Adopting external session: ${tmuxName}`);
     const id = randomUUID();
 
     // Capture existing scrollback before attaching
@@ -467,9 +474,11 @@ export class PTYManager {
         cwd: homedir(),
         env: buildSafeEnv(),
       });
-    } catch {
+    } catch (err) {
+      console.error(`[clsh] Failed to spawn tmux attach for ${tmuxName}:`, err);
       return null;
     }
+    console.log(`[clsh] Spawned control-mode attach for ${tmuxName}, pid=${pty.pid}`);
 
     const buffer: string[] = [];
     const dataListeners: Array<(data: string) => void> = [];
@@ -665,8 +674,20 @@ export class PTYManager {
 
     const externalSessions = listExternalTmuxSessions();
     for (const tmuxName of externalSessions) {
-      if (!knownTmuxNames.has(tmuxName)) {
-        this.adoptExternalSession(tmuxName);
+      if (!knownTmuxNames.has(tmuxName) && !this.failedExternalAdoptions.has(tmuxName)) {
+        const session = this.adoptExternalSession(tmuxName);
+        if (!session) {
+          this.failedExternalAdoptions.add(tmuxName);
+        }
+      }
+    }
+
+    // Clear failed entries for sessions that no longer exist in tmux
+    // (so if they reappear later, we try again)
+    const liveSet = new Set(externalSessions);
+    for (const name of this.failedExternalAdoptions) {
+      if (!liveSet.has(name)) {
+        this.failedExternalAdoptions.delete(name);
       }
     }
   }

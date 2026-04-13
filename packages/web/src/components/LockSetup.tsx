@@ -41,13 +41,18 @@ export function LockSetup({ biometricAvailable, onComplete, jwt }: LockSetupProp
       if (jwt) {
         try {
           const clientHash = getClientPwdHash();
+          // Hash password before sending to protect against HTTP sniffing in local mode.
+          // Server stores a scrypt hash of this SHA-256 hash.
+          const pwdBuf = new TextEncoder().encode(password);
+          const hashBuf = await crypto.subtle.digest('SHA-256', pwdBuf);
+          const serverPwd = Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2, '0')).join('');
           await fetch('/api/auth/password/setup', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               'Authorization': `Bearer ${jwt}`,
             },
-            body: JSON.stringify({ password, clientHash }),
+            body: JSON.stringify({ password: serverPwd, clientHash }),
           });
         } catch {
           // Server-side setup failed, client lock still works

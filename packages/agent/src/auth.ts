@@ -42,7 +42,7 @@ export function verifyBootstrapToken(
 
 export interface SessionJWTClaims {
   email?: string;
-  authMethod: 'bootstrap' | 'password' | 'biometric';
+  authMethod: 'bootstrap' | 'password';
 }
 
 /**
@@ -59,7 +59,7 @@ export async function createSessionJWT(
   return new SignJWT({ ...claims })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
-    .setExpirationTime('30d')
+    .setExpirationTime('8h')
     .setJti(jti)
     .setIssuer('clsh-agent')
     .setSubject(claims.email ?? 'local')

@@ -3,7 +3,7 @@ import type { AuthState } from '../hooks/useAuth';
 import { QRScanner } from './QRScanner';
 import { useIsMobile } from '../hooks/useMediaQuery';
 import { IOSKeyboard } from './IOSKeyboard';
-import { restoreLockState, authenticateBiometric as localBiometricAuth, setupPassword, enableLock } from '../lib/lock-screen';
+import { restoreLockState, setupPassword, enableLock } from '../lib/lock-screen';
 
 // Same logo as LockScreen
 const LOGO_LINES = [
@@ -18,18 +18,15 @@ const LOGO_LINES = [
 interface ServerStatus {
   configured: boolean;
   biometricConfigured: boolean;
-  credentialId: string | null;
-  userId: string | null;
 }
 
 interface AuthScreenProps {
   auth: AuthState;
   onBootstrapSubmit: (token: string) => Promise<boolean>;
   onPasswordSubmit: (password: string) => Promise<boolean>;
-  onBiometricSubmit: (credentialId: string) => Promise<boolean>;
 }
 
-export function AuthScreen({ auth, onBootstrapSubmit, onPasswordSubmit, onBiometricSubmit }: AuthScreenProps) {
+export function AuthScreen({ auth, onBootstrapSubmit, onPasswordSubmit }: AuthScreenProps) {
   const [bootstrapToken, setBootstrapToken] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -48,7 +45,7 @@ export function AuthScreen({ auth, onBootstrapSubmit, onPasswordSubmit, onBiomet
         if (!cancelled) setServerStatus(data);
       })
       .catch(() => {
-        if (!cancelled) setServerStatus({ configured: false, biometricConfigured: false, credentialId: null, userId: null });
+        if (!cancelled) setServerStatus({ configured: false, biometricConfigured: false });
       });
     return () => { cancelled = true; };
   }, []);
@@ -102,36 +99,9 @@ export function AuthScreen({ auth, onBootstrapSubmit, onPasswordSubmit, onBiomet
     }
   }, [password, onPasswordSubmit, auth.error, restoreAfterAuth]);
 
-  // ── Face ID handler ──
-  const handleBiometric = useCallback(async () => {
-    if (!serverStatus?.credentialId || !serverStatus?.userId) return;
-    setError('');
-
-    // Write credential to localStorage temporarily so WebAuthn can find it
-    try {
-      localStorage.setItem('clsh_lock_credential', serverStatus.credentialId);
-      localStorage.setItem('clsh_lock_user_id', serverStatus.userId);
-    } catch { /* ignore */ }
-
-    try {
-      const ok = await localBiometricAuth();
-      if (ok) {
-        // Enable lock before auth state changes (same race condition fix)
-        enableLock();
-
-        const success = await onBiometricSubmit(serverStatus.credentialId);
-        if (success) {
-          void restoreAfterAuth();
-        } else {
-          setError('Authentication failed. Try your password.');
-        }
-      } else {
-        setError('Face ID failed. Try again or use your password.');
-      }
-    } catch {
-      setError('Face ID failed. Try again or use your password.');
-    }
-  }, [serverStatus, onBiometricSubmit, restoreAfterAuth]);
+  // NOTE: Biometric (Face ID) is client-side only (lock screen).
+  // Server-side biometric auth was removed for security — no cryptographic verification.
+  // Users must authenticate with password or bootstrap token first.
 
   // ── QR/bootstrap handlers ──
   const handleBootstrapSubmit = async (e: FormEvent) => {
@@ -176,7 +146,8 @@ export function AuthScreen({ auth, onBootstrapSubmit, onPasswordSubmit, onBiomet
   }
 
   const displayError = error || auth.error || '';
-  const hasBiometric = serverStatus.biometricConfigured && !!serverStatus.credentialId;
+  // Biometric auth removed from auth screen — Face ID is client-side lock only
+  const hasBiometric = false;
 
   // ══════════════════════════════════════════════════════════════
   // PASSWORD/BIOMETRIC CONFIGURED → Show LockScreen-style UI
@@ -205,24 +176,7 @@ export function AuthScreen({ auth, onBootstrapSubmit, onPasswordSubmit, onBiomet
               <p className="mb-4 text-center text-sm text-neutral-500">Enter password</p>
             )}
 
-            {/* Face ID button */}
-            {hasBiometric && (
-              <>
-                <button
-                  onClick={() => void handleBiometric()}
-                  disabled={auth.loading}
-                  className="w-full rounded-md bg-clsh-orange px-4 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {auth.loading ? 'Verifying...' : 'Unlock with Face ID'}
-                </button>
-
-                <div className="my-4 flex items-center gap-3">
-                  <div className="h-px flex-1 bg-clsh-border" />
-                  <span className="text-xs text-neutral-600">or</span>
-                  <div className="h-px flex-1 bg-clsh-border" />
-                </div>
-              </>
-            )}
+            {/* Face ID removed from auth screen — biometric is client-side lock only */}
 
             {/* Password field */}
             <div className="space-y-3">

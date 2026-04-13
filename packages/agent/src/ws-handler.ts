@@ -34,7 +34,33 @@ function parseClientMessage(raw: string): ClientMessage | null {
     if (typeof parsed !== 'object' || parsed === null || !('type' in parsed)) {
       return null;
     }
-    return parsed as ClientMessage;
+    const msg = parsed as Record<string, unknown>;
+    const type = msg['type'];
+
+    // Validate required fields per message type
+    switch (type) {
+      case 'stdin':
+        if (typeof msg['sessionId'] !== 'string' || typeof msg['data'] !== 'string') return null;
+        break;
+      case 'resize':
+        if (typeof msg['sessionId'] !== 'string' || typeof msg['cols'] !== 'number' || typeof msg['rows'] !== 'number') return null;
+        break;
+      case 'session_close':
+      case 'session_subscribe':
+        if (typeof msg['sessionId'] !== 'string') return null;
+        break;
+      case 'session_rename':
+        if (typeof msg['sessionId'] !== 'string' || typeof msg['name'] !== 'string') return null;
+        break;
+      case 'ping':
+      case 'session_list':
+      case 'session_create':
+        break; // no required fields beyond type
+      default:
+        return null; // unknown message type
+    }
+
+    return msg as unknown as ClientMessage;
   } catch {
     return null;
   }

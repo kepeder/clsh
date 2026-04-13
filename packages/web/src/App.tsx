@@ -17,7 +17,7 @@ import { getBiometricIds, getClientPwdHash } from './lib/lock-screen';
 import type { View } from './lib/types';
 
 export function App() {
-  const { auth, authenticateWithBootstrap, authenticateWithPassword, authenticateWithBiometric, handleUnauthorized } = useAuth();
+  const { auth, authenticateWithBootstrap, authenticateWithPassword, handleUnauthorized } = useAuth();
   const { sessions, wsClient, messageBus, createSession, closeSession, getSessionOutput, setSessionSnapshot, renameSession, refreshSessions, status: wsStatus } = useSessionManager(auth, handleUnauthorized);
   const { skin, setSkin, perKeyColors, setPerKeyColors } = useSkin();
   const { nativeKeyboard, setNativeKeyboard } = useNativeKeyboard();
@@ -130,7 +130,6 @@ export function App() {
         auth={auth}
         onBootstrapSubmit={authenticateWithBootstrap}
         onPasswordSubmit={authenticateWithPassword}
-        onBiometricSubmit={authenticateWithBiometric}
       />
     ) : (
       <div className="h-full bg-[#060606]" />

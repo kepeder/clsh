@@ -196,7 +196,8 @@ export function printAccessInfo(
     console.log(`${o}  Scan to connect ${dim}(token embedded in QR)${r}`);
     console.log('');
     console.log(`${o}  URL:   ${r}${publicUrl}`);
-    console.log(`${o}  Token: ${r}${bootstrapToken}  ${dim}(one-time, expires in 5 min)${r}`);
+    const masked = bootstrapToken.slice(0, 6) + '...' + bootstrapToken.slice(-4);
+    console.log(`${o}  Token: ${r}${masked}  ${dim}(embedded in QR — one-time, expires in 5 min)${r}`);
     console.log(`${o}  Mode:  ${r}${method === 'ngrok' ? 'remote (ngrok)' : method === 'ssh' ? 'remote (ssh)' : 'local Wi-Fi only'}`);
     if (method === 'local') {
       console.log('');

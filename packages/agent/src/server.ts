@@ -122,7 +122,7 @@ export function createAppServer(
     res.header('X-Frame-Options', 'DENY');
     res.header('X-Content-Type-Options', 'nosniff');
     res.header('Referrer-Policy', 'strict-origin-when-cross-origin');
-    res.header('Content-Security-Policy', "default-src 'self'; connect-src 'self' wss: ws:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:");
+    res.header('Content-Security-Policy', "default-src 'self'; connect-src 'self' wss: ws:; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; font-src 'self' https://cdn.jsdelivr.net; img-src 'self' data: blob:; media-src 'self' blob:");
     next();
   });
 
@@ -229,14 +229,19 @@ function mountAuthRoutes(
         return;
       }
 
+      // Verify and consume atomically — prevents TOCTOU race where
+      // two concurrent requests both pass verification before either deletes.
       const valid = verifyBootstrapToken(statements, token);
       if (!valid) {
         res.status(401).json({ error: 'Invalid or expired bootstrap token' });
         return;
       }
-
-      // Consume the token immediately — one-time use only
-      statements.deleteBootstrapToken.run(hashToken(token));
+      const deleted = statements.deleteBootstrapToken.run(hashToken(token));
+      if (deleted.changes === 0) {
+        // Token was already consumed by a concurrent request
+        res.status(401).json({ error: 'Invalid or expired bootstrap token' });
+        return;
+      }
 
       const jwt = await createSessionJWT(
         { authMethod: 'bootstrap' },
@@ -262,15 +267,13 @@ function mountAuthRoutes(
   });
 
   // GET /api/auth/password/status — check if password and/or biometric are configured.
-  // Returns credentialId + userId so PWA can attempt WebAuthn without a JWT.
+  // Only returns booleans — credential details require authentication (see /api/auth/lock/state).
   app.get('/api/auth/password/status', (_req, res) => {
     const passwordRow = statements.getPassword.get();
     const biometricRow = statements.getBiometric.get();
     res.json({
       configured: !!passwordRow,
       biometricConfigured: !!biometricRow,
-      credentialId: biometricRow?.credential_id ?? null,
-      userId: biometricRow?.user_id ?? null,
     });
   });
 
@@ -339,34 +342,11 @@ function mountAuthRoutes(
     }
   });
 
-  // POST /api/auth/biometric — authenticate via Face ID (unauthenticated).
-  // The client does WebAuthn locally; if it succeeds and credentialId matches
-  // the stored one, we issue a JWT. Rate-limited like password login.
-  app.post('/api/auth/biometric', passwordLimiter, async (req, res) => {
-    try {
-      const { credentialId } = req.body as { credentialId?: string };
-      if (!credentialId || typeof credentialId !== 'string') {
-        res.status(400).json({ error: 'Authentication failed' });
-        return;
-      }
-
-      const row = statements.getBiometric.get();
-      if (!row || row.credential_id !== credentialId) {
-        res.status(401).json({ error: 'Authentication failed' });
-        return;
-      }
-
-      const jwt = await createSessionJWT(
-        { authMethod: 'biometric' },
-        config.jwtSecret,
-      );
-
-      res.json({ token: jwt });
-    } catch (err) {
-      console.error('Biometric auth error:', err);
-      res.status(500).json({ error: 'Internal server error' });
-    }
-  });
+  // NOTE: Biometric (Face ID) authentication is handled client-side only.
+  // The client performs WebAuthn locally for the lock screen and uses
+  // the stored JWT from localStorage. There is no server-side biometric
+  // auth endpoint — it cannot be implemented securely without full
+  // WebAuthn server-side verification (challenge + assertion signature).
 
   // ── Lock state (biometric credential storage + restoration) ──
 

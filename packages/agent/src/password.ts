@@ -1,7 +1,7 @@
 import { scryptSync, randomBytes, timingSafeEqual } from 'node:crypto';
 
-/** Minimum password length enforced server-side. */
-export const MIN_PASSWORD_LENGTH = 6;
+/** Minimum password length enforced server-side (NIST SP 800-63B recommends >= 8). */
+export const MIN_PASSWORD_LENGTH = 8;
 
 /** scrypt parameters. */
 const SCRYPT_N = 16384; // cost

@@ -155,6 +155,8 @@ export async function main(): Promise<void> {
     }
     // Enter key: \r in raw mode, \n in line-buffered/piped mode
     if (ch === 13 || ch === 10) {
+      // Clean up expired bootstrap tokens (older than 5 minutes)
+      db.exec("DELETE FROM bootstrap_tokens WHERE created_at < datetime('now', '-5 minutes')");
       currentBootstrapToken = generateBootstrapToken();
       const newTokenId = randomUUID();
       const newTokenHash = hashToken(currentBootstrapToken);

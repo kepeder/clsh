@@ -20,13 +20,23 @@ const IDLE_CHECK_INTERVAL = 2_000;
 /** Time in ms after last activity before a session is considered idle. */
 const IDLE_THRESHOLD = 2_500;
 
-/** Environment variables that must never leak into PTY child processes. */
-const SENSITIVE_ENV_VARS: ReadonlyArray<string> = [
-  'NGROK_AUTHTOKEN',
-  'RESEND_API_KEY',
-  'JWT_SECRET',
-  'CLAUDECODE',
-];
+/** Environment variables safe to pass into PTY child processes.
+ *  Uses an allowlist (not denylist) to prevent leaking secrets like
+ *  API keys, cloud credentials, or tokens that happen to be in the
+ *  host environment. */
+const SAFE_ENV_VARS: ReadonlySet<string> = new Set([
+  'PATH', 'HOME', 'USER', 'LOGNAME', 'SHELL',
+  'TERM', 'COLORTERM', 'TERM_PROGRAM', 'TERM_PROGRAM_VERSION',
+  'LANG', 'LC_ALL', 'LC_CTYPE', 'LC_TERMINAL', 'LC_TERMINAL_VERSION',
+  'EDITOR', 'VISUAL', 'PAGER', 'LESS', 'LSCOLORS', 'LS_COLORS',
+  'CLICOLOR', 'CLICOLOR_FORCE',
+  'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_CACHE_HOME', 'XDG_RUNTIME_DIR',
+  'TMPDIR', 'TMP', 'TEMP',
+  'HOSTNAME', 'DISPLAY', 'WAYLAND_DISPLAY',
+  'SSH_AUTH_SOCK',
+  'FNM_DIR', 'NVM_DIR', 'PYENV_ROOT', 'GOPATH', 'GOROOT', 'CARGO_HOME', 'RUSTUP_HOME',
+  'HOMEBREW_PREFIX', 'HOMEBREW_CELLAR', 'HOMEBREW_REPOSITORY',
+]);
 
 /** Maps shell types to their executable and arguments. */
 const SHELL_MAP: Record<ShellType, [string, string[]]> = {
@@ -96,7 +106,7 @@ function buildSafeEnv(): Record<string, string> {
   const env: Record<string, string> = {};
 
   for (const [key, value] of Object.entries(process.env)) {
-    if (value !== undefined && !SENSITIVE_ENV_VARS.includes(key)) {
+    if (value !== undefined && SAFE_ENV_VARS.has(key)) {
       env[key] = value;
     }
   }

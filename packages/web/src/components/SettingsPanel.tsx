@@ -136,7 +136,7 @@ export function SettingsPanel({ onClose, onOpenSkinStudio, sessionCount }: Setti
               textAlign: 'center',
             }}
           >
-            <div style={{ fontSize: 18, fontWeight: 700, color: '#ccc' }}>v0.1</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: '#ccc' }}>v0.2.0</div>
             <div style={{ fontSize: 9, color: '#555', marginTop: 2 }}>VERSION</div>
           </div>
         </div>
@@ -236,7 +236,7 @@ export function SettingsPanel({ onClose, onOpenSkinStudio, sessionCount }: Setti
         {/* Footer */}
         <div style={{ marginTop: 16, textAlign: 'center' }}>
           <span style={{ fontSize: 9, color: '#333' }}>
-            clsh v0.1.0 — your mac, in your pocket
+            clsh v0.2.0 — your mac, in your pocket
           </span>
         </div>
       </div>

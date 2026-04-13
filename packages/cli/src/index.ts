@@ -23,7 +23,7 @@ if (args[0] === 'setup') {
 } else if (args[0] === '--version' || args[0] === '-v') {
   // Read version from package.json at build time isn't worth the complexity.
   // Just hardcode and bump with releases.
-  console.log('clsh 0.1.0');
+  console.log('clsh 0.2.0');
 } else {
   const { main } = await import('@clsh/agent');
   await main();

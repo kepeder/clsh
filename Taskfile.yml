@@ -22,6 +22,15 @@ tasks:
     dir: packages/web
     cmd: npx vite --port {{.WEB_PORT}}
 
+  start:
+    desc: Run in production mode (build first, then start agent)
+    deps: [build]
+    cmds:
+      - node packages/agent/dist/index.js
+    env:
+      PORT: '{{.PORT}}'
+      NODE_ENV: production
+
   build:
     desc: Build all packages
     cmd: npx turbo run build

@@ -26,6 +26,8 @@ export interface UseSessionManagerReturn {
   setSessionSnapshot: (sessionId: string, snapshot: string) => void;
   /** Renames a session (client-side only) */
   renameSession: (sessionId: string, name: string) => void;
+  /** Re-requests the session list from the server */
+  refreshSessions: () => void;
   status: ConnectionStatus;
 }
 
@@ -249,6 +251,11 @@ export function useSessionManager(
     wsClientRef.current?.send({ type: 'session_rename', sessionId, name });
   }, []);
 
+  /** Re-requests the session list from the server (triggers external session discovery). */
+  const refreshSessions = useCallback((): void => {
+    wsClientRef.current?.send({ type: 'session_list' });
+  }, []);
+
   return {
     sessions,
     wsClient,
@@ -259,6 +266,7 @@ export function useSessionManager(
     getSessionOutput,
     setSessionSnapshot,
     renameSession,
+    refreshSessions,
     status,
   };
 }

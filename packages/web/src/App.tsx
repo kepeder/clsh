@@ -18,7 +18,7 @@ import type { View } from './lib/types';
 
 export function App() {
   const { auth, authenticateWithBootstrap, authenticateWithPassword, authenticateWithBiometric, handleUnauthorized } = useAuth();
-  const { sessions, wsClient, messageBus, createSession, closeSession, getSessionOutput, setSessionSnapshot, renameSession, status: wsStatus } = useSessionManager(auth, handleUnauthorized);
+  const { sessions, wsClient, messageBus, createSession, closeSession, getSessionOutput, setSessionSnapshot, renameSession, refreshSessions, status: wsStatus } = useSessionManager(auth, handleUnauthorized);
   const { skin, setSkin, perKeyColors, setPerKeyColors } = useSkin();
   const { nativeKeyboard, setNativeKeyboard } = useNativeKeyboard();
   const { isLocked, needsSetup, biometricAvailable, hasBiometric, unlock, completeLockSetup } = useLockScreen(auth.isAuthenticated);
@@ -97,7 +97,8 @@ export function App() {
       setSessionSnapshot(activeSessionId, snapshot);
     }
     setView('grid');
-  }, [activeSessionId, setSessionSnapshot]);
+    refreshSessions();
+  }, [activeSessionId, setSessionSnapshot, refreshSessions]);
 
   const handleOpenSkinStudio = useCallback(() => {
     setSettingsOpen(false);

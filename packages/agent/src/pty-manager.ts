@@ -640,9 +640,35 @@ export class PTYManager {
     return this.sessions.get(id);
   }
 
-  /** Returns all active sessions. */
+  /**
+   * Returns all active sessions.
+   * Also checks for new external cy-* sessions on the tmux socket
+   * and adopts any that aren't already tracked.
+   */
   list(): PTYSession[] {
+    this.adoptNewExternalSessions();
     return Array.from(this.sessions.values());
+  }
+
+  /**
+   * Scans the tmux socket for external cy-* sessions not yet tracked
+   * and adopts them. Called lazily on list() so new sessions are
+   * discovered when clients request the session list.
+   */
+  private adoptNewExternalSessions(): void {
+    const knownTmuxNames = new Set<string>();
+    for (const session of this.sessions.values()) {
+      if (session.tmuxName) {
+        knownTmuxNames.add(session.tmuxName);
+      }
+    }
+
+    const externalSessions = listExternalTmuxSessions();
+    for (const tmuxName of externalSessions) {
+      if (!knownTmuxNames.has(tmuxName)) {
+        this.adoptExternalSession(tmuxName);
+      }
+    }
   }
 
   /**

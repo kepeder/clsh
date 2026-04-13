@@ -1,5 +1,5 @@
 @import 'tailwindcss';
-@import url('https://cdn.jsdelivr.net/gh/mshaugh/nerdfont-webfonts@v3.3.0/build/firacode-nerd-font-mono.css');
+/* FiraCode Nerd Font Mono loaded via <link> in index.html for earliest possible fetch */
 
 @theme {
   --color-clsh-orange: #f97316;

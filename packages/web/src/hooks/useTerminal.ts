@@ -63,6 +63,10 @@ export function useTerminal(
 
     const init = async () => {
       try {
+        // Wait for the @import stylesheet to be parsed and @font-face registered,
+        // then wait for the actual font file to download and become ready.
+        await document.fonts.ready;
+        // Explicitly trigger load in case the font hasn't been used yet
         await document.fonts.load('12px "FiraCode Nerd Font Mono"');
       } catch {
         // Font unavailable — proceed with fallback

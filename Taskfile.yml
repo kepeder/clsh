@@ -1,0 +1,47 @@
+version: '3'
+
+vars:
+  PORT: '{{.PORT | default "4030"}}'
+  WEB_PORT: '{{.WEB_PORT | default "4031"}}'
+
+tasks:
+  dev:
+    desc: Run agent and web dev servers in parallel
+    deps: [dev:agent, dev:web]
+
+  dev:agent:
+    desc: Run the agent server (tsx watch)
+    dir: packages/agent
+    cmd: npx tsx watch src/index.ts
+    env:
+      WEB_PORT: '{{.WEB_PORT}}'
+      PORT: '{{.PORT}}'
+
+  dev:web:
+    desc: Run the web dev server (vite)
+    dir: packages/web
+    cmd: npx vite --port {{.WEB_PORT}}
+
+  build:
+    desc: Build all packages
+    cmd: npx turbo run build
+
+  typecheck:
+    desc: Typecheck all packages
+    cmd: npx turbo run typecheck
+
+  lint:
+    desc: Lint all packages
+    cmd: npx turbo run lint
+
+  test:
+    desc: Run tests
+    cmd: npx turbo run test
+
+  format:
+    desc: Format all files with prettier
+    cmd: npx prettier --write .
+
+  format:check:
+    desc: Check formatting
+    cmd: npx prettier --check .

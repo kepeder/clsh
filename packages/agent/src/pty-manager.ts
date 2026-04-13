@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import { basename } from 'node:path';
 import type { ShellType, DefaultableShell } from './types.js';
 import type { DbStatements } from './db.js';
-import { tmuxSessionExists, killTmuxSession, listClshTmuxSessions, capturePaneContent, TMUX_SOCKET } from './tmux.js';
+import { tmuxSessionExists, killTmuxSession, listClshTmuxSessions, listExternalTmuxSessions, capturePaneContent, TMUX_SOCKET } from './tmux.js';
 import { ControlModeLineBuffer, buildSendKeysCommands } from './control-mode-parser.js';
 
 /** Maximum number of buffer entries retained per session for reconnection replay. */
@@ -59,6 +59,8 @@ export interface PTYSession {
   tmuxName: string | null;
   /** Whether the user has explicitly renamed this session (suppresses OSC 7 name updates). */
   userRenamed: boolean;
+  /** Whether this session was created externally (e.g. claude-yolo) and adopted by clsh. */
+  external: boolean;
   onData: (callback: (data: string) => void) => void;
   onExit: (callback: (event: { exitCode: number; signal?: number }) => void) => void;
   onUpdate: (callback: (meta: SessionMeta) => void) => void;
@@ -178,7 +180,7 @@ export class PTYManager {
         session.name = basename(parsedCwd);
       }
       this.emitUpdate(session);
-      if (session.tmuxName && this.db) {
+      if (session.tmuxName && this.db && !session.external) {
         try {
           this.db.updatePtySession.run(session.name, session.cwd, session.id);
         } catch { /* non-critical */ }
@@ -208,7 +210,7 @@ export class PTYManager {
       for (const listener of exitListeners) {
         listener(event);
       }
-      if (session.tmuxName && !this.shuttingDown) {
+      if (session.tmuxName && !this.shuttingDown && !session.external) {
         killTmuxSession(session.tmuxName);
         if (this.db) {
           try { this.db.deletePtySession.run(session.id); } catch { /* ignore */ }
@@ -243,7 +245,7 @@ export class PTYManager {
       for (const listener of exitListeners) {
         listener(event);
       }
-      if (session.tmuxName && !this.shuttingDown) {
+      if (session.tmuxName && !this.shuttingDown && !session.external) {
         killTmuxSession(session.tmuxName);
         if (this.db) {
           try { this.db.deletePtySession.run(session.id); } catch { /* ignore */ }
@@ -320,6 +322,7 @@ export class PTYManager {
       lastActivityAt: Date.now(),
       tmuxName,
       userRenamed: !!name,
+      external: false,
       onData: (callback) => { dataListeners.push(callback); },
       onExit: (callback) => { exitListeners.push(callback); },
       onUpdate: (callback) => {
@@ -418,6 +421,7 @@ export class PTYManager {
       lastActivityAt: Date.now(),
       tmuxName,
       userRenamed: false,
+      external: false,
       onData: (callback) => { dataListeners.push(callback); },
       onExit: (callback) => { exitListeners.push(callback); },
       onUpdate: (callback) => {
@@ -432,37 +436,122 @@ export class PTYManager {
   }
 
   /**
+   * Adopts an externally-created tmux session (e.g. from claude-yolo or claude-tmux).
+   * These sessions exist on the clsh socket but were not created by clsh.
+   * They are not persisted to the DB and are not killed on clsh shutdown.
+   */
+  adoptExternalSession(
+    tmuxName: string,
+    cols: number = 80,
+    rows: number = 24,
+  ): PTYSession | null {
+    if (!tmuxSessionExists(tmuxName)) {
+      return null;
+    }
+
+    const id = randomUUID();
+
+    // Capture existing scrollback before attaching
+    const capturedContent = capturePaneContent(tmuxName);
+
+    const args = this.tmuxConfPath
+      ? ['-CC', '-L', TMUX_SOCKET, '-f', this.tmuxConfPath, 'attach-session', '-t', tmuxName]
+      : ['-CC', '-L', TMUX_SOCKET, 'attach-session', '-t', tmuxName];
+
+    let pty: ReturnType<typeof spawn>;
+    try {
+      pty = spawn('tmux', args, {
+        name: 'xterm-256color',
+        cols,
+        rows,
+        cwd: homedir(),
+        env: buildSafeEnv(),
+      });
+    } catch {
+      return null;
+    }
+
+    const buffer: string[] = [];
+    const dataListeners: Array<(data: string) => void> = [];
+    const exitListeners: Array<(event: { exitCode: number; signal?: number }) => void> = [];
+    this.updateListeners.set(id, []);
+
+    if (capturedContent) {
+      buffer.push(capturedContent);
+    }
+
+    // Derive a friendly name from the tmux session name (e.g. "cy-qda-front-a1b2c3d4" → "qda-front")
+    const nameParts = tmuxName.replace(/^cy-/, '').replace(/-[0-9a-f]{8}$/, '');
+
+    const session: PTYSession = {
+      id,
+      shell: 'bash',
+      pty,
+      buffer,
+      name: nameParts || tmuxName,
+      cwd: homedir(),
+      status: 'idle',
+      lastActivityAt: Date.now(),
+      tmuxName,
+      userRenamed: false,
+      external: true,
+      onData: (callback) => { dataListeners.push(callback); },
+      onExit: (callback) => { exitListeners.push(callback); },
+      onUpdate: (callback) => {
+        const listeners = this.updateListeners.get(id);
+        if (listeners) listeners.push(callback);
+      },
+    };
+
+    this.wireControlModeHandlers(session, dataListeners, exitListeners);
+    this.sessions.set(id, session);
+    return session;
+  }
+
+  /**
    * Rediscovers sessions from a previous server run.
    * Reads the pty_sessions table, reattaches to any tmux sessions that still exist,
    * and cleans up rows for dead sessions. Also kills zombie tmux sessions.
    * Returns the list of successfully recovered sessions.
    */
   rediscoverAll(): PTYSession[] {
-    if (!this.db) return [];
-
     const recovered: PTYSession[] = [];
-    const dbRows = this.db.listPtySessions.all();
-    const dbTmuxNames = new Set<string>();
 
-    for (const row of dbRows) {
-      dbTmuxNames.add(row.tmux_name);
-      const session = this.reattach(
-        row.id,
-        row.tmux_name,
-        row.shell as ShellType,
-        row.name,
-        row.cwd,
-      );
-      if (session) {
-        recovered.push(session);
+    // Rediscover clsh-managed sessions from DB
+    if (this.db) {
+      const dbRows = this.db.listPtySessions.all();
+      const dbTmuxNames = new Set<string>();
+
+      for (const row of dbRows) {
+        dbTmuxNames.add(row.tmux_name);
+        const session = this.reattach(
+          row.id,
+          row.tmux_name,
+          row.shell as ShellType,
+          row.name,
+          row.cwd,
+        );
+        if (session) {
+          recovered.push(session);
+        }
+      }
+
+      // Kill zombie clsh sessions (exist in tmux but not in DB)
+      const liveTmuxSessions = listClshTmuxSessions();
+      for (const tmuxName of liveTmuxSessions) {
+        if (!dbTmuxNames.has(tmuxName)) {
+          killTmuxSession(tmuxName);
+        }
       }
     }
 
-    // Kill zombie tmux sessions (exist in tmux but not in DB)
-    const liveTmuxSessions = listClshTmuxSessions();
-    for (const tmuxName of liveTmuxSessions) {
-      if (!dbTmuxNames.has(tmuxName)) {
-        killTmuxSession(tmuxName);
+    // Adopt external sessions (cy-* prefix) from the tmux socket.
+    // These are not persisted to DB — they are discovered purely via tmux.
+    const externalSessions = listExternalTmuxSessions();
+    for (const tmuxName of externalSessions) {
+      const session = this.adoptExternalSession(tmuxName);
+      if (session) {
+        recovered.push(session);
       }
     }
 
@@ -500,7 +589,7 @@ export class PTYManager {
     session.name = name;
     session.userRenamed = true;
     this.emitUpdate(session);
-    if (session.tmuxName && this.db) {
+    if (session.tmuxName && this.db && !session.external) {
       try { this.db.updatePtySession.run(session.name, session.cwd, session.id); } catch { /* non-critical */ }
     }
   }
@@ -535,7 +624,7 @@ export class PTYManager {
 
     session.pty.kill();
 
-    if (session.tmuxName) {
+    if (session.tmuxName && !session.external) {
       killTmuxSession(session.tmuxName);
       if (this.db) {
         try { this.db.deletePtySession.run(id); } catch { /* ignore */ }
@@ -575,11 +664,12 @@ export class PTYManager {
 
   /**
    * Full cleanup — kills everything including tmux sessions and DB rows.
+   * External sessions are detached but not killed (they are owned by their creator).
    */
   destroyAllIncludingTmux(): void {
     for (const session of this.sessions.values()) {
       session.pty.kill();
-      if (session.tmuxName) {
+      if (session.tmuxName && !session.external) {
         killTmuxSession(session.tmuxName);
       }
     }

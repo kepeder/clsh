@@ -21,6 +21,9 @@ set -ga terminal-overrides ",xterm-256color:Tc"
 /** Prefix used for all clsh-managed tmux sessions. */
 const SESSION_PREFIX = 'clsh-';
 
+/** Prefix used for externally-created sessions (e.g. claude-yolo, claude-tmux). */
+const EXTERNAL_PREFIX = 'cy-';
+
 /**
  * Checks if tmux is available on the system.
  */
@@ -60,6 +63,25 @@ export function listClshTmuxSessions(): string[] {
       .filter((name) => name.startsWith(SESSION_PREFIX));
   } catch {
     // tmux server not running or no sessions — both fine
+    return [];
+  }
+}
+
+/**
+ * Lists tmux sessions matching the cy- prefix (externally-created sessions).
+ * These are sessions created by claude-yolo or claude-tmux, not by clsh itself.
+ */
+export function listExternalTmuxSessions(): string[] {
+  try {
+    const output = execFileSync('tmux', ['-L', TMUX_SOCKET, 'list-sessions', '-F', '#{session_name}'], {
+      encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    return output
+      .trim()
+      .split('\n')
+      .filter((name) => name.startsWith(EXTERNAL_PREFIX));
+  } catch {
     return [];
   }
 }

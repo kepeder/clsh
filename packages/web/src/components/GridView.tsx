@@ -17,6 +17,7 @@ export function GridView({
   onCreateSession,
   onCloseSession,
   onOpenSettings,
+  onRefresh,
   wsStatus,
 }: GridViewProps) {
   const isConnected = wsStatus === 'connected';
@@ -60,24 +61,44 @@ export function GridView({
             {sessions.length} session{sessions.length !== 1 ? 's' : ''}
           </span>
         </div>
-        <button
-          type="button"
-          onClick={onOpenSettings}
-          className="flex items-center justify-center"
-          style={{
-            width: 32,
-            height: 32,
-            background: '#161616',
-            border: '1px solid #2a2a2a',
-            borderRadius: 6,
-            color: '#666',
-            fontSize: 16,
-            cursor: 'pointer',
-          }}
-          aria-label="Settings"
-        >
-          &#x2699;
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={onRefresh}
+            className="flex items-center justify-center"
+            style={{
+              width: 32,
+              height: 32,
+              background: '#161616',
+              border: '1px solid #2a2a2a',
+              borderRadius: 6,
+              color: '#666',
+              fontSize: 14,
+              cursor: 'pointer',
+            }}
+            aria-label="Refresh sessions"
+          >
+            &#x21bb;
+          </button>
+          <button
+            type="button"
+            onClick={onOpenSettings}
+            className="flex items-center justify-center"
+            style={{
+              width: 32,
+              height: 32,
+              background: '#161616',
+              border: '1px solid #2a2a2a',
+              borderRadius: 6,
+              color: '#666',
+              fontSize: 16,
+              cursor: 'pointer',
+            }}
+            aria-label="Settings"
+          >
+            &#x2699;
+          </button>
+        </div>
       </div>
 
       {/* Section label */}

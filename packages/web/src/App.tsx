@@ -186,6 +186,7 @@ export function App() {
           onCreateSession={handleCreateSession}
           onCloseSession={closeSession}
           onOpenSettings={handleOpenSettings}
+          onRefresh={refreshSessions}
           wsStatus={wsStatus}
         />
         {settingsOpen && (
